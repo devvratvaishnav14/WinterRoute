@@ -22,5 +22,390 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/*
+ * Temporary atmospheric background for trip screens. Static and
+ * weather-agnostic on purpose — this is a placeholder for the dynamic,
+ * weather-reactive background described in docs/architecture.md, not an
+ * attempt at it.
+ */
+.atmosphere-bg {
+  position: relative;
+  isolation: isolate;
+  /* Clips the decorative ::before below, which is deliberately oversized
+     (inset: -20%) so its blur has room to breathe without a hard edge.
+     Without this, that oversized box extends past the viewport and adds
+     real horizontal (and vertical) scrollable overflow to the page. */
+  overflow: hidden;
+  background: linear-gradient(180deg, #0b1220 0%, #101a2e 45%, #16213a 100%);
+}
+
+.atmosphere-bg::before {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  z-index: -1;
+  background:
+    radial-gradient(60% 45% at 78% 12%, rgba(148, 197, 255, 0.32), transparent 70%),
+    radial-gradient(55% 40% at 15% 85%, rgba(56, 89, 148, 0.3), transparent 70%),
+    radial-gradient(80% 60% at 50% 100%, rgba(8, 14, 26, 0.85), transparent 60%);
+  filter: blur(40px);
+}
+
+@keyframes results-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-results-in {
+  animation: results-in 0.35s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-results-in {
+    animation: none;
+  }
+}
+
+/*
+ * Results-page weather scene — driven by `resolveWeatherScene` (the
+ * SELECTED commute's forecast, never the viewer's current weather/time).
+ * See docs/architecture.md "Weather scene architecture."
+ *
+ * Structure: `.weather-scene` is the positioned container; one or two
+ * `.weather-scene-layer` elements crossfade via opacity (see
+ * `WeatherSceneBackground.tsx`) when the resolved scene changes; an
+ * optional `<canvas class="weather-scene-particles">` draws rain/snow;
+ * `.weather-scene-content` holds the actual results UI, unaffected by
+ * the decorative layers' blur.
+ */
+.weather-scene {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+/* One crossfading layer, at NORMAL size (clipped to the scene by
+   `.weather-scene`'s own `overflow: hidden`) — only opacity transitions
+   here. The oversized/blurred look lives one level down, on
+   `.weather-scene-sky`, so it never also smears the cloud/glow/haze
+   children stacked on top of it (a shared parent `filter: blur()`
+   would otherwise blur everything inside it together). */
+.weather-scene-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  transition: opacity 900ms ease;
+  will-change: opacity;
+}
+
+/* The base sky gradient — oversized (`inset: -20%`) so its blur has
+   room to breathe without a hard edge, same technique as the original
+   `.atmosphere-bg::before`. */
+.weather-scene-sky {
+  position: absolute;
+  inset: -20%;
+  filter: blur(30px);
+}
+
+/* A large, soft, slowly-drifting cloud mass — never a tiny repeated
+   icon. `background-size: 60% 100%` + `repeat-x` + animating
+   `background-position-x` by exactly one tile width (-60%) is what
+   makes the drift loop seamlessly forever without a visible jump. */
+.weather-cloud-layer {
+  position: absolute;
+  inset: -25% -15%;
+  background-repeat: repeat-x;
+  background-size: 60% 100%;
+  animation-name: weather-cloud-drift;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.weather-cloud-layer.is-reverse {
+  animation-direction: reverse;
+}
+@keyframes weather-cloud-drift {
+  from {
+    background-position-x: 0%;
+  }
+  to {
+    background-position-x: -60%;
+  }
+}
+
+/* Sun/moon are each TWO concentric, CENTERED layers — a large soft
+   "bloom" (atmospheric diffusion, heavily blurred) behind a smaller,
+   near-blown-out "core" — deliberately never an off-center highlight
+   (that's what made the previous sun read as a lit 3D sphere/planet).
+   Both share the exact same center, positioned once via
+   `CELESTIAL_POSITION` in `WeatherSceneBackground.tsx`. Rendered BELOW
+   the cloud layers in DOM order, so partly-cloudy's drifting near cloud
+   visibly passes in front. */
+.weather-scene-sun-bloom,
+.weather-scene-moon-bloom {
+  position: absolute;
+  border-radius: 9999px;
+  pointer-events: none;
+}
+.weather-scene-sun-bloom {
+  width: 280px;
+  height: 280px;
+  margin-left: -140px;
+  margin-top: -140px;
+  background: radial-gradient(circle, rgba(255, 246, 214, 0.55) 0%, rgba(255, 226, 160, 0.3) 32%, rgba(255, 210, 140, 0.12) 58%, transparent 74%);
+  filter: blur(20px);
+}
+.weather-scene-moon-bloom {
+  width: 170px;
+  height: 170px;
+  margin-left: -85px;
+  margin-top: -85px;
+  background: radial-gradient(circle, rgba(210, 220, 242, 0.32) 0%, rgba(182, 197, 227, 0.16) 45%, transparent 72%);
+  filter: blur(16px);
+}
+.weather-scene-sun-core,
+.weather-scene-moon-core {
+  position: absolute;
+  border-radius: 9999px;
+  pointer-events: none;
+}
+.weather-scene-sun-core {
+  width: 60px;
+  height: 60px;
+  margin-left: -30px;
+  margin-top: -30px;
+  background: radial-gradient(circle, #ffffff 0%, #fffaea 22%, #ffe9a8 52%, rgba(255, 220, 150, 0.45) 76%, transparent 88%);
+  filter: blur(1.5px);
+  box-shadow: 0 0 46px 12px rgba(255, 224, 160, 0.45);
+}
+.weather-scene-moon-core {
+  width: 42px;
+  height: 42px;
+  margin-left: -21px;
+  margin-top: -21px;
+  background: radial-gradient(circle, #f9fbff 0%, #e7ecf8 40%, #ccd5e8 70%, rgba(196, 206, 226, 0.3) 86%, transparent 93%);
+  box-shadow: 0 0 26px 6px rgba(202, 214, 236, 0.32);
+}
+
+/* A sparse, condition-independent star field — only rendered when the
+   resolved profile says `starDots` (clear/mainly-clear night). */
+/* A sparse, believable star field — never a dense galaxy. "full"
+   (clear/mainly-clear night) uses every dot below; "sparse" (partly-
+   cloudy night, stars still peeking through gaps) shows only a handful
+   at lower opacity, via the `.is-sparse` override. A slow, low-
+   amplitude whole-layer opacity pulse gives a subtle twinkle — never
+   per-star flicker, which would read as noisy pixels rather than a sky. */
+.weather-scene-stars {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(1.5px 1.5px at 20% 20%, #e4ecff, transparent),
+    radial-gradient(1.6px 1.6px at 40% 34%, #e4ecff, transparent),
+    radial-gradient(1.2px 1.2px at 65% 15%, #e4ecff, transparent),
+    radial-gradient(1.3px 1.3px at 85% 44%, #e4ecff, transparent),
+    radial-gradient(1.2px 1.2px at 30% 58%, #e4ecff, transparent),
+    radial-gradient(1px 1px at 10% 70%, #e4ecff, transparent),
+    radial-gradient(1.1px 1.1px at 55% 78%, #e4ecff, transparent),
+    radial-gradient(1.3px 1.3px at 92% 68%, #e4ecff, transparent),
+    radial-gradient(1px 1px at 75% 30%, #e4ecff, transparent);
+  animation: weather-star-twinkle 7s ease-in-out infinite;
+}
+.weather-scene-stars.is-sparse {
+  background:
+    radial-gradient(1.3px 1.3px at 22% 24%, #e4ecff, transparent),
+    radial-gradient(1.1px 1.1px at 68% 18%, #e4ecff, transparent),
+    radial-gradient(1px 1px at 85% 46%, #e4ecff, transparent),
+    radial-gradient(1.1px 1.1px at 40% 60%, #e4ecff, transparent);
+  animation-name: weather-star-twinkle-sparse;
+  animation-duration: 9s;
+}
+@keyframes weather-star-twinkle {
+  0%,
+  100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+@keyframes weather-star-twinkle-sparse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.22;
+  }
+}
+
+/* A constant, condition-independent edge vignette — adds depth without
+   any per-condition tuning; never dark enough to hide content, since the
+   scrim (below, higher z-index) already owns readability. */
+.weather-scene-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 40%, transparent 50%, rgba(4, 7, 13, 0.32) 100%);
+}
+
+/* Fog: layered horizontal mist BANDS drifting slowly at different
+   speeds/opacities/vertical offsets — "mist passing through the scene,"
+   not a flat white overlay. Only rendered when the resolved profile has
+   `fogBandCount > 0`. */
+.weather-fog-band {
+  position: absolute;
+  left: -20%;
+  right: -20%;
+  height: 16%;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, var(--band-alpha, 0.35)) 50%, transparent 100%);
+  filter: blur(16px);
+  animation: weather-fog-drift var(--band-duration, 70s) ease-in-out infinite alternate;
+}
+.weather-fog-band.is-reverse {
+  animation-direction: alternate-reverse;
+}
+@keyframes weather-fog-drift {
+  from {
+    transform: translateX(-6%);
+  }
+  to {
+    transform: translateX(6%);
+  }
+}
+
+/* The optional visible branched bolt — brief, irregular, layered
+   behind/within the cloud masses, alongside (not instead of) the
+   full-scene illumination flash below. */
+.weather-scene-bolt {
+  position: absolute;
+  top: 4%;
+  width: 22%;
+  height: 40%;
+  opacity: 0;
+  pointer-events: none;
+}
+.weather-scene-bolt.is-flashing {
+  animation: weather-bolt-flash 260ms ease-out 1;
+}
+@keyframes weather-bolt-flash {
+  0% {
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.95;
+  }
+  20% {
+    opacity: 0.3;
+  }
+  30% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Ambient moisture/mist — softens the whole scene and adds depth;
+   heaviest for fog, lightest for clear skies (see
+   `weatherVisualProfile.ts`). */
+.weather-scene-haze {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 0%, rgba(210, 220, 235, 0.55) 55%, rgba(198, 210, 226, 0.4) 100%);
+  filter: blur(10px);
+}
+
+/* A constant, condition-independent contrast floor between the
+   atmosphere and the content below — guarantees text/card readability
+   even over a bright clear sky or a dense snow scene, without needing
+   per-condition readability tuning. */
+/* The middle band (28%-65%) is where nearly every result card actually
+   sits — it was previously left almost undarkened (0.04-0.08), which is
+   why text lost contrast over a bright/pale scene (clear day, light
+   snow, fog). Raised to a real, uniform readability floor across the
+   whole content area, not just the top/bottom edges. */
+.weather-scene-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(6, 10, 18, 0.3) 0%, rgba(6, 10, 18, 0.16) 28%, rgba(6, 10, 18, 0.2) 65%, rgba(6, 10, 18, 0.36) 100%);
+}
+
+.weather-scene-particles {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  width: 100%;
+  height: 100%;
+  animation: weather-fade-in 700ms ease forwards;
+}
+
+@keyframes weather-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.weather-scene-content {
+  position: relative;
+  z-index: 2;
+}
+
+@keyframes weather-scene-lightning {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.16;
+  }
+}
+.weather-scene-lightning {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: #eef3ff;
+  opacity: 0;
+  pointer-events: none;
+}
+.weather-scene-lightning.is-flashing {
+  animation: weather-scene-lightning 260ms ease-out 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .weather-scene-layer {
+    transition: none;
+  }
+  .weather-scene-lightning.is-flashing,
+  .weather-scene-bolt.is-flashing {
+    animation: none;
+  }
+  .weather-cloud-layer,
+  .weather-fog-band {
+    animation: none;
+  }
+  .weather-scene-particles {
+    animation: none;
+    opacity: 1;
+  }
+  .weather-scene-stars {
+    animation: none;
+    opacity: 0.8;
+  }
+  .weather-scene-stars.is-sparse {
+    opacity: 0.4;
+  }
 }

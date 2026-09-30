@@ -1,4 +1,17 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WinterRoute
+
+WinterRoute is a Canada-focused data science project that predicts how
+risky and how long a commute (Vancouver / Burnaby / Surrey, V1) will be,
+given the route, transportation method, weather, traffic, and transit
+conditions — and recommends when to leave.
+
+See [`docs/README.md`](./docs/README.md) for the project overview,
+architecture, and technical decision log. This project is being built
+incrementally in stages; see `docs/decisions/` for what's been decided so
+far.
+
+Built with [Next.js](https://nextjs.org), bootstrapped with
+[`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
 
